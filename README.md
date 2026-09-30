@@ -52,6 +52,9 @@ dark mode = the universe.
 - **Connections** (off by default) — optional faint lines linking books by the same author.
 - **Import read list** — paste titles you've read; add an optional rating per line
   (`Title | 4`, `Title ★★★★`, or `Title 4/5`) to bulk‑import ratings too.
+- **Read now / Download now** — each book's detail panel has two link buttons. Public books link
+  to their **Internet Archive** page (Read now); your own eBooks link to your **OneDrive** library
+  (Download now); unavailable books show both faded. See §5c.
 - **Keyboard** — `/` search · `r` read‑today · `f` fit · `m` menu · `Esc` close.
 
 State that matters — **which books are read, your ratings, and your theme** — is stored in the
@@ -170,6 +173,24 @@ new baseline (existing manual marks are kept — the seed only adds). Goodreads 
 by normalized title + author surname; a stubborn mismatch can be fixed with a `TITLE_MAP` entry
 in `classify.py`. Current merge: **156 TBR books matched, 114 read books added → 1,549 total,
 170 read/rated.**
+
+### 5c. "Read now" / "Download now" links
+
+Each book's detail panel shows two buttons whose state depends on where the book can be obtained:
+
+- **eBook** (your OneDrive library, `format == "eBook"`) → **Download now** is active and opens your
+  OneDrive folder; **Read now** is faded. *(The OneDrive share requires sign‑in, so it can't
+  deep‑link individual files — the button opens the whole library folder. The folder URL is the
+  `ONEDRIVE` constant in `openDetail()`.)*
+- **Not in OneDrive but on Internet Archive** → **Read now** is active and opens the matched Archive
+  item (`archive.org/details/<id>`); **Download now** is faded.
+- **In neither** → both buttons are faded.
+
+Internet Archive availability is decided at **build time**: `pipeline.py` queries the Archive API
+for every non‑eBook book with a strict *texts + author‑surname* match, stores the item id in each
+book's `ar` field, and caches all lookups in `pipeline/archive_cache.json` (so rebuilds are instant
+and offline‑safe). Delete that file to force a fresh scan; set `SKIP_ARCHIVE=1` to skip the network.
+Current scan: **287 of 572 non‑eBook books linkable**.
 
 ---
 
@@ -366,6 +387,7 @@ Keep the "stable code" (`AVs-Library.html`) working; use the knobs in §7 to mak
 
 ## Recent Changes
 
+- **Read now / Download now buttons**: Each book's detail panel now has two link buttons. eBook (OneDrive) books get an active **Download now** (opens the OneDrive library folder) with Read faded; non‑OneDrive books get an active **Read now** linking to a matching Internet Archive item when one exists (build‑time strict texts+author scan, cached in `pipeline/archive_cache.json`, 287/572 linkable); books in neither place have both faded. See §5c. Also set *The Body* (Bill Bryson) to read/5★ in the xlsx source to match the remote edit.
 - **AI Instruction Added**: Note for AI assistants added to keep changes minimal.
 - **Dark Mode Orbit & Rotating Text**: When zoomed in, stars display book details (author, genre, page count) rotating around a circular orbit path.
 - **Genre Cloud Highlight**: In both light and dark modes, hovering over a book now visibly lightens and highlights the entire background genre cloud it belongs to.
