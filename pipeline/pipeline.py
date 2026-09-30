@@ -949,6 +949,53 @@ for i, b in enumerate(books):
     b.pop('source', None)
 
 # ---------------------------------------------------------------------------
+# 2b. INTERNET ARCHIVE availability -> "Read now" links
+#     Only non-eBook books (Bookshelf / Goodreads); eBooks download from OneDrive.
+#     Cached in archive_cache.json so re-runs are instant and offline-safe.
+#     Set env SKIP_ARCHIVE=1 to skip network and use cache only.
+# ---------------------------------------------------------------------------
+import urllib.request, urllib.parse, socket, time
+ARCHIVE_CACHE = os.path.join(HERE, 'archive_cache.json')
+try: _arcache = json.load(open(ARCHIVE_CACHE))
+except Exception: _arcache = {}
+def _surname(a):
+    p = norm(a).split(); return p[-1] if p else ''
+def archive_lookup(title, author):
+    q = 'mediatype:(texts) AND title:("%s")' % norm(title)
+    sn = _surname(author)
+    if sn: q += ' AND creator:("%s")' % sn
+    url = 'https://archive.org/advancedsearch.php?' + urllib.parse.urlencode(
+        {'q': q, 'fl[]': ['identifier', 'title', 'creator'], 'rows': 3, 'output': 'json'}, doseq=True)
+    try:
+        socket.setdefaulttimeout(12)
+        docs = json.load(urllib.request.urlopen(url))['response']['docs']
+        nt = norm(title)
+        for d in docs:
+            it = norm(str(d.get('title', ''))); ic = norm(str(d.get('creator', '')))
+            if (nt in it or it in nt) and (not sn or sn in ic):
+                return d.get('identifier', '')
+    except Exception:
+        return None      # network error -> unknown (keep whatever cache had)
+    return ''
+SCAN_ARCHIVE = os.environ.get('SKIP_ARCHIVE') != '1'
+_scanned = 0
+for b in books:
+    b['archive'] = ''
+    if b['format'] == 'eBook':
+        continue
+    key = norm(b['title']) + '|' + _surname(b['author'])
+    if key in _arcache:
+        b['archive'] = _arcache[key]
+    elif SCAN_ARCHIVE:
+        res = archive_lookup(b['title'], b['author'])
+        if res is not None:
+            _arcache[key] = res; b['archive'] = res; _scanned += 1
+            time.sleep(0.2)
+json.dump(_arcache, open(ARCHIVE_CACHE, 'w'), ensure_ascii=False)
+print('archive: %d cached, %d newly scanned, %d books linkable'
+      % (len(_arcache), _scanned, sum(1 for b in books if b.get('archive'))))
+
+# ---------------------------------------------------------------------------
 # 3. REPORT
 # ---------------------------------------------------------------------------
 from collections import Counter
@@ -963,7 +1010,7 @@ print('=== UNCLASSIFIED (%d) ===' % len(unc))
 for b in unc:
     print(f"  {b['title']}  ||  {b['author']}")
 
-slim = [{'id':b['id'],'t':b['title'],'a':b['author'],'g':b['genre'],'f':b['format'],'pg':b.get('pages',300)} for b in books]
+slim = [{'id':b['id'],'t':b['title'],'a':b['author'],'g':b['genre'],'f':b['format'],'pg':b.get('pages',300),'ar':b.get('archive','')} for b in books]
 data_json = json.dumps(slim, ensure_ascii=False, separators=(',',':')).replace('<','\\u003c')
 # Goodreads-derived seed: which books are read + their star ratings (applied once to localStorage)
 seed_read = [b['id'] for b in books if b.get('gr_shelf')=='read' or b.get('my_rating')]
@@ -1071,6 +1118,13 @@ body.theme-dark #themeBtn .ic-sun{display:block}
 .mini{flex:1;padding:9px 8px;border:1px solid var(--line2);border-radius:10px;background:var(--card);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:.15s}
 .mini:hover{color:var(--ink);border-color:var(--accent)}
 .mini.on{color:var(--accent);border-color:var(--accent);background:var(--hover)}
+
+#detail .dactions{display:flex;gap:10px;margin-top:16px}
+#detail .dact{flex:1;text-align:center;padding:13px 10px;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;cursor:pointer;transition:.15s;border:1px solid transparent;display:flex;align-items:center;justify-content:center;gap:7px}
+#detail #dread{background:linear-gradient(135deg,#1aa06d,#159f8e);color:#fff}
+#detail #ddl{background:var(--field);color:var(--ink);border:1px solid var(--line2)}
+#detail #dread:hover,#detail #ddl:hover{filter:brightness(1.06)}
+#detail .dact.off{opacity:.4;pointer-events:none;cursor:not-allowed;background:var(--field);color:var(--muted2);border:1px solid var(--line);filter:none}
 
 .ldiv{height:1px;background:var(--line);margin:3px 0}
 .lh{display:flex;align-items:center;justify-content:space-between;padding:0 2px}
@@ -1244,6 +1298,10 @@ body.theme-dark #themeBtn .ic-sun{display:block}
       <span class="dlabel">Your rating</span>
       <span class="stars" id="dstars"></span>
       <span class="dratev" id="dratev">Not rated</span>
+    </div>
+    <div class="dactions">
+      <a id="dread" class="dact" target="_blank" rel="noopener">↗ Read now</a>
+      <a id="ddl" class="dact" target="_blank" rel="noopener">↓ Download now</a>
     </div>
     <button id="markbtn"></button>
     <div class="dsub" id="dbysub" style="display:none">More by this author</div>
@@ -1709,6 +1767,11 @@ function openDetail(b){
   document.getElementById("dgenre").textContent=b.g;
   document.getElementById("dformat").textContent=b.f;
   updMark(b); renderDetailStars(b);
+  // Read now / Download now: OneDrive books -> download (read faded); else Internet Archive -> read (download faded); neither -> both faded
+  var ONEDRIVE="https://txtghana-my.sharepoint.com/:f:/g/personal/abhinav_gwosevo_com/IgCho4V_QkvKQ7a2XGk-4JP0AWy_30WTiHw_Jawp45QyANo?e=8yRJ0q";
+  var rd=document.getElementById("dread"), dl=document.getElementById("ddl"), inOD=(b.f==="eBook");
+  if(inOD){ dl.href=ONEDRIVE; dl.classList.remove("off"); } else { dl.removeAttribute("href"); dl.classList.add("off"); }
+  if(!inOD && b.ar){ rd.href="https://archive.org/details/"+b.ar; rd.classList.remove("off"); } else { rd.removeAttribute("href"); rd.classList.add("off"); }
   var sub=document.getElementById("dbysub"), byA=document.getElementById("dbyauthor"); byA.innerHTML=""; var na=norm(b.a);
   if(na.length>=4){ var same=BOOKS.filter(function(x){return x.id!==b.id&&norm(x.a)===na;}).slice(0,6); if(same.length){ sub.style.display="block"; same.forEach(function(x){ byA.appendChild(chip(x.t,function(){focusBook(x);})); }); } else sub.style.display="none"; } else sub.style.display="none";
   var gc=document.getElementById("dgenrechips"); gc.innerHTML=""; gc.appendChild(chip("◎ Show only "+b.g,function(){soloGenre(b.g);}));
