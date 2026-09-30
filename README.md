@@ -31,9 +31,9 @@ dark mode = the universe.
 ## 2. What it does (features)
 
 - **Galaxy map** — ~1,549 books as dots clustered into 24 genres (1,435 TBR + your read/rated
-  Goodreads books). **Dot size = page length.** **Light mode — Brain** = blues + black on white
-  with a **thin black brain outline** wrapping the cluster (the books read as neurons inside a
-  brain); **Dark mode — universe** = glowing colored stars on deep space with a faint starfield.
+  Goodreads books). **Dot size = page length.** **Light mode** = a glowing neuron network on white
+  (dots take their genre colour with soft halos); **Dark mode — universe** = glowing colored stars
+  on deep space with a faint starfield.
 - **📚 Goodreads‑synced read/unread** — your Goodreads *read* shelf and ratings are baked in, so
   read books show read (and rate‑able) out of the box. See §5b to refresh from a new export.
 - **Light / dark toggle** — the ☀️/🌙 button in the top bar; the choice is remembered.
@@ -83,7 +83,7 @@ just the file — no server, no internet needed. Double‑click `AVs-Library.htm
    1–5 stars stores `{id: stars}` and also marks it read. Read stars render faded.
 
 Rendering order each frame (top of `draw()`): background (white, or space gradient + starfield)
-→ glow/bloom pass → (optional connections) → **star dots** → **brain outline** (light mode only)
+→ glow/bloom pass → (optional connections) → **star dots**
 → selection/hover ring → zoomed‑in book labels → **genre labels** (hover/zoom‑gated).
 
 ---
@@ -242,19 +242,6 @@ strings inside **`AVs-Library.html`** (Path A: instant, no tools) and/or **`pipe
 | Dark glow size | `var gz=Math.max(7, rr*5);` | 5 | Halo size relative to dot size. |
 | Glow falloff | `grd.addColorStop(...)` in `glowSprite()` | — | Tighter / feathier star glow. |
 | Light plate‑bloom | `ctx.globalAlpha=0.5;` + the `rr<3.2` cutoff (else branch) | 0.5 / 3.2 | Soft grey halo under big light‑mode dots; raise the cutoff to bloom fewer. |
-
-### 7.3b Brain outline (light mode only — "Light mode — Brain")
-
-A thin black brain is stroked around the whole cluster in light mode so the books read as neurons
-inside a brain. It's drawn in world space (pans/zooms with the cluster) and skipped entirely in
-dark mode (`if(!dark) drawBrain();`).
-
-| What | Find | Now | Effect |
-|---|---|---|---|
-| Shape | `var BRAIN=[ … ]` (anchor points) | — | The outline is anchor points smoothed by `strokeSmooth` (Catmull‑Rom). Sub‑paths: cerebrum, Sylvian fissure, cerebellum + folia, brainstem, gyri. Edit/add points to reshape. |
-| How tightly it wraps | `var targW=…*1.24, targH=…*1.42;` in `drawBrain()` | 1.24 / 1.42 | Bigger = the brain sits further outside the cluster. |
-| Line colour / weight | `ctx.strokeStyle="rgba(10,12,18,0.82)"` · `ctx.lineWidth=…/S` | black, ~1.1px | Thin black lines. Lower the `1.1` for thinner. |
-| Toggle name | `toast(...:"Light mode — Brain")` | — | The label shown when switching to light mode. |
 
 ### 7.4 Genre labels (hover / zoom reveal)
 | What | Find | Now | Effect |
