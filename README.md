@@ -55,6 +55,8 @@ dark mode = the universe.
 - **Read now / Download now** — each book's detail panel has two link buttons. Public books link
   to their **Internet Archive** page (Read now); your own eBooks link to your **OneDrive** library
   (Download now); unavailable books show both faded. See §5c.
+- **Cover posters + Goodreads** — the detail panel shows each book's **cover** (from Open Library)
+  and a **"View on Goodreads"** link. See §5d.
 - **Keyboard** — `/` search · `r` read‑today · `f` fit · `m` menu · `Esc` close.
 
 State that matters — **which books are read, your ratings, and your theme** — is stored in the
@@ -191,6 +193,21 @@ for every non‑eBook book with a strict *texts + author‑surname* match, store
 book's `ar` field, and caches all lookups in `pipeline/archive_cache.json` (so rebuilds are instant
 and offline‑safe). Delete that file to force a fresh scan; set `SKIP_ARCHIVE=1` to skip the network.
 Current scan: **287 of 572 non‑eBook books linkable**.
+
+### 5d. Book covers + Goodreads link
+
+The detail panel shows a **cover poster** at the top and a **"View on Goodreads ↗"** link below the
+action buttons.
+
+- **Goodreads** — a search link built in `openDetail()` from the title + author
+  (`goodreads.com/search?q=…`). No per‑book id needed, so it works for every book.
+- **Covers** — `pipeline.py` queries **Open Library** (`openlibrary.org/search.json`) for each book's
+  `cover_i`, stored in the `cv` field and cached in `pipeline/cover_cache.json`. The app renders
+  `https://covers.openlibrary.org/b/id/<cv>-M.jpg`; books with no match simply show no poster
+  (the `<img>` hides itself on error). Covers load **remotely** (like the movie app's TMDB posters),
+  so they need internet; everything else works offline. Delete the cache to re‑scan, or set
+  `SKIP_COVERS=1` to skip the network. Current scan: **681 of 1,549 books have a cover** (manga,
+  regional and obscure titles are often missing from Open Library).
 
 ---
 
@@ -374,6 +391,7 @@ Keep the "stable code" (`AVs-Library.html`) working; use the knobs in §7 to mak
 
 ## Recent Changes
 
+- **Book covers + Goodreads links**: Each book's detail panel now shows a **cover poster** (fetched from Open Library at build time, cached in `pipeline/cover_cache.json`, 681/1,549 matched) and a **"View on Goodreads"** search link. See §5d.
 - **Read now / Download now buttons**: Each book's detail panel now has two link buttons. eBook (OneDrive) books get an active **Download now** (opens the OneDrive library folder) with Read faded; non‑OneDrive books get an active **Read now** linking to a matching Internet Archive item when one exists (build‑time strict texts+author scan, cached in `pipeline/archive_cache.json`, 287/572 linkable); books in neither place have both faded. See §5c. Also set *The Body* (Bill Bryson) to read/5★ in the xlsx source to match the remote edit.
 - **AI Instruction Added**: Note for AI assistants added to keep changes minimal.
 - **Dark Mode Orbit & Rotating Text**: When zoomed in, stars display book details (author, genre, page count) rotating around a circular orbit path.
