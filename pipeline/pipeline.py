@@ -996,6 +996,40 @@ print('archive: %d cached, %d newly scanned, %d books linkable'
       % (len(_arcache), _scanned, sum(1 for b in books if b.get('archive'))))
 
 # ---------------------------------------------------------------------------
+# 2c. BOOK COVERS via Open Library -> detail-panel poster (field "cv" = cover id)
+#     Cached in cover_cache.json. Set env SKIP_COVERS=1 to use cache only.
+#     App builds the image URL: https://covers.openlibrary.org/b/id/<cv>-M.jpg
+# ---------------------------------------------------------------------------
+COVER_CACHE = os.path.join(HERE, 'cover_cache.json')
+try: _cvcache = json.load(open(COVER_CACHE))
+except Exception: _cvcache = {}
+def cover_lookup(title, author):
+    params = urllib.parse.urlencode({'title': title, 'author': author, 'limit': 1, 'fields': 'cover_i'})
+    try:
+        socket.setdefaulttimeout(12)
+        docs = json.load(urllib.request.urlopen('https://openlibrary.org/search.json?' + params)).get('docs') or []
+        if docs and docs[0].get('cover_i'):
+            return docs[0]['cover_i']
+        return ''
+    except Exception:
+        return None      # network error -> unknown (keep cache)
+SCAN_COVERS = os.environ.get('SKIP_COVERS') != '1'
+_cscanned = 0
+for b in books:
+    b['cover'] = ''
+    key = norm(b['title']) + '|' + _surname(b['author'])
+    if key in _cvcache:
+        b['cover'] = _cvcache[key]
+    elif SCAN_COVERS:
+        res = cover_lookup(b['title'], b['author'])
+        if res is not None:
+            _cvcache[key] = res; b['cover'] = res; _cscanned += 1
+            time.sleep(0.15)
+json.dump(_cvcache, open(COVER_CACHE, 'w'), ensure_ascii=False)
+print('covers: %d cached, %d newly scanned, %d with cover'
+      % (len(_cvcache), _cscanned, sum(1 for b in books if b.get('cover'))))
+
+# ---------------------------------------------------------------------------
 # 3. REPORT
 # ---------------------------------------------------------------------------
 from collections import Counter
@@ -1010,7 +1044,7 @@ print('=== UNCLASSIFIED (%d) ===' % len(unc))
 for b in unc:
     print(f"  {b['title']}  ||  {b['author']}")
 
-slim = [{'id':b['id'],'t':b['title'],'a':b['author'],'g':b['genre'],'f':b['format'],'pg':b.get('pages',300),'ar':b.get('archive','')} for b in books]
+slim = [{'id':b['id'],'t':b['title'],'a':b['author'],'g':b['genre'],'f':b['format'],'pg':b.get('pages',300),'ar':b.get('archive',''),'cv':b.get('cover','')} for b in books]
 data_json = json.dumps(slim, ensure_ascii=False, separators=(',',':')).replace('<','\\u003c')
 # Goodreads-derived seed: which books are read + their star ratings (applied once to localStorage)
 seed_read = [b['id'] for b in books if b.get('gr_shelf')=='read' or b.get('my_rating')]
@@ -1125,6 +1159,10 @@ body.theme-dark #themeBtn .ic-sun{display:block}
 #detail #ddl{background:var(--field);color:var(--ink);border:1px solid var(--line2)}
 #detail #dread:hover,#detail #ddl:hover{filter:brightness(1.06)}
 #detail .dact.off{opacity:.4;pointer-events:none;cursor:not-allowed;background:var(--field);color:var(--muted2);border:1px solid var(--line);filter:none}
+#detail .dcover{display:none;width:120px;height:180px;object-fit:cover;border-radius:10px;box-shadow:var(--shadow-sm);margin:4px auto 10px;background:var(--field)}
+#detail .dcover.on{display:block}
+#detail .dgoodreads{display:block;text-align:center;margin-top:10px;font-size:13px;font-weight:700;text-decoration:none;color:var(--muted);border:1px solid var(--line2);border-radius:10px;padding:10px}
+#detail .dgoodreads:hover{color:var(--ink);border-color:var(--accent)}
 
 .ldiv{height:1px;background:var(--line);margin:3px 0}
 .lh{display:flex;align-items:center;justify-content:space-between;padding:0 2px}
@@ -1286,6 +1324,7 @@ body.theme-dark #themeBtn .ic-sun{display:block}
 
   <div id="detail">
     <button class="close" id="dclose">✕</button>
+    <img id="dcover" class="dcover" alt="cover">
     <div class="dtag" id="dtag"></div>
     <h2 id="dtitle"></h2>
     <div class="dauth" id="dauth"></div>
@@ -1303,6 +1342,7 @@ body.theme-dark #themeBtn .ic-sun{display:block}
       <a id="dread" class="dact" target="_blank" rel="noopener">↗ Read now</a>
       <a id="ddl" class="dact" target="_blank" rel="noopener">↓ Download now</a>
     </div>
+    <a id="dgr" class="dgoodreads" target="_blank" rel="noopener">View on Goodreads ↗</a>
     <button id="markbtn"></button>
     <div class="dsub" id="dbysub" style="display:none">More by this author</div>
     <div class="chips" id="dbyauthor"></div>
@@ -1772,6 +1812,12 @@ function openDetail(b){
   var rd=document.getElementById("dread"), dl=document.getElementById("ddl"), inOD=(b.f==="eBook");
   if(inOD){ dl.href=ONEDRIVE; dl.classList.remove("off"); } else { dl.removeAttribute("href"); dl.classList.add("off"); }
   if(!inOD && b.ar){ rd.href="https://archive.org/details/"+b.ar; rd.classList.remove("off"); } else { rd.removeAttribute("href"); rd.classList.add("off"); }
+  // cover poster (Open Library) + Goodreads search link
+  var cov=document.getElementById("dcover");
+  cov.onerror=function(){ cov.classList.remove("on"); };
+  if(b.cv){ cov.src="https://covers.openlibrary.org/b/id/"+b.cv+"-M.jpg"; cov.classList.add("on"); }
+  else { cov.removeAttribute("src"); cov.classList.remove("on"); }
+  document.getElementById("dgr").href="https://www.goodreads.com/search?q="+encodeURIComponent((b.t+" "+(b.a||"")).trim());
   var sub=document.getElementById("dbysub"), byA=document.getElementById("dbyauthor"); byA.innerHTML=""; var na=norm(b.a);
   if(na.length>=4){ var same=BOOKS.filter(function(x){return x.id!==b.id&&norm(x.a)===na;}).slice(0,6); if(same.length){ sub.style.display="block"; same.forEach(function(x){ byA.appendChild(chip(x.t,function(){focusBook(x);})); }); } else sub.style.display="none"; } else sub.style.display="none";
   var gc=document.getElementById("dgenrechips"); gc.innerHTML=""; gc.appendChild(chip("◎ Show only "+b.g,function(){soloGenre(b.g);}));
